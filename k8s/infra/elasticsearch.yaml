@@ -33,6 +33,12 @@ spec:
       enableServiceLinks: false
       nodeSelector:
         jjinmak/role: infra
+      # infra 노드 taint가 걸려 있어 이 toleration이 있는 Pod만 올라가도록 설정함
+      tolerations:
+        - key: jjinmak/role
+          operator: Equal
+          value: infra
+          effect: NoSchedule
       # ES는 1000번 사용자로 실행된다. 데이터 폴더에 쓸 수 있도록 그룹 권한을 맞춘다.
       securityContext:
         fsGroup: 1000

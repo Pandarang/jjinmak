@@ -35,6 +35,12 @@ spec:
           type: Unconfined
       nodeSelector:
         jjinmak/role: infra
+      # infra 노드 taint가 걸려 있어 이 toleration이 있는 Pod만 올라가도록 설정함
+      tolerations:
+        - key: jjinmak/role
+          operator: Equal
+          value: infra
+          effect: NoSchedule
       containers:
         - name: postgres
           image: pgvector/pgvector:pg17
