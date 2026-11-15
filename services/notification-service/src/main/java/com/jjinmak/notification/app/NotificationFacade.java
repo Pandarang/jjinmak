@@ -1,5 +1,7 @@
 package com.jjinmak.notification.app;
 
+import com.jjinmak.contracts.auction.event.AuctionBidSucceedEvent;
+import com.jjinmak.contracts.auction.event.AuctionEndingSoonEvent;
 import com.jjinmak.contracts.auction.event.AuctionFailedEvent;
 import com.jjinmak.contracts.auction.event.AuctionWonEvent;
 import com.jjinmak.contracts.cart.event.CartPaymentDefaultEvent;
@@ -152,5 +154,13 @@ public class NotificationFacade {
                                                           List<NotificationSettingsUpdateRequestDto.Item> items,
                                                           LocalDateTime now) {
         return notificationSettingUseCase.update(memberId, items, now);
+    }
+    @Transactional
+    public int notifyOutbid(AuctionBidSucceedEvent event, LocalDateTime now) {
+        return save(auctionNotificationMapper.fromBidSucceed(event), now);
+    }
+    @Transactional
+    public int notifyEndingSoon(AuctionEndingSoonEvent event, LocalDateTime now) {
+        return save(auctionNotificationMapper.fromEndingSoon(event), now);
     }
 }
