@@ -198,16 +198,3 @@ curl -H "X-Member-Id: 1" -H "X-Member-Roles: ROLE_BUYER" http://localhost:8089/a
 Kafka UI: http://localhost:8989 · Swagger: 각 서비스 `/swagger-ui.html`
 
 ---
-
-## 👥 Team Members
-
-프로그래머스 백엔드 데브코스 8기 · 3팀 안현잘부팀
-
-| 이름 | GitHub | 담당 |
-| --- | --- | --- |
-| 송현수 (PO) | [@SongHyunSoo](https://github.com/SongHyunSoo) | 상품, 판매자 후기, 찜, 실시간 Q&A, 검색(Elasticsearch) |
-| 차승환 | [@greatCloud13](https://github.com/greatCloud13) | 회원, 인증, 경고 · 제재, 모듈 분리 템플릿, 서버 · k3s · CI/CD |
-| 박신형 | [@shinh09](https://github.com/shinh09) | 경매(회차 · 입찰 · 낙찰 · 네덜란드식), 알림 |
-| 신종혁 | [@Rasit-NP](https://github.com/Rasit-NP) | 장바구니, 주문, 배송, 구매확정, Kafka 공통, 추천 |
-| 김지유 | [@AHFAH](https://github.com/AHFAH) | 결제(PG), 지갑(예치금 · 에스크로 · 원장) |
-| 조민형 | [@Pandarang](https://github.com/Pandarang) | 정산, 환불, 거래 채팅 |
