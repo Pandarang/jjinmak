@@ -23,6 +23,9 @@ public class Product extends BaseIdAndTime {
     // TODO: 프론트 연동 배포 테스트용으로 5분. 테스트 끝나면 Duration.ofHours(1)로 되돌리기
     public static final Duration EDITABLE_PERIOD = Duration.ofMinutes(5);
 
+    // 네덜란드식은 플랫폼(관리자)이 직접 여는 이벤트라 판매자 정책 동의 대신 이 값으로 남긴다.
+    public static final String PLATFORM_POLICY_VERSION = "PLATFORM";
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(nullable = false)
     private ProductMember seller;
@@ -98,7 +101,8 @@ public class Product extends BaseIdAndTime {
     private Product(ProductMember seller, String name, ProductCategory category,
                     Manufacturer manufacturer, String manufacturerEtc, String description,
                     ShippingFeeType shippingFeeType, Long shippingFee, boolean bundleShipping,
-                    String policyVersion, LocalDateTime now, ProductAuctionTerms auctionTerms) {
+                    String policyVersion, LocalDateTime now,
+                    ProductAuctionTerms auctionTerms, LocalDateTime auctionScheduledAt) {
         this.seller = seller;
         this.name = name;
         this.category = category;
@@ -112,7 +116,7 @@ public class Product extends BaseIdAndTime {
         this.policyVersion = policyVersion;
         this.policyAgreedAt = now;
         this.auctionTerms = auctionTerms;
-        this.auctionScheduledAt = scheduleAuctionAt(now);
+        this.auctionScheduledAt = auctionScheduledAt;
         this.round = 1;
         this.auctionState = ProductAuctionState.scheduled();
     }
@@ -142,8 +146,32 @@ public class Product extends BaseIdAndTime {
                 seller, name, category,
                 manufacturer, resolveManufacturerEtc(manufacturer, manufacturerEtc), description,
                 shippingFeeType, shippingFeeType.resolveFee(customShippingFee), bundleShipping,
-                policyVersion, now, auctionTerms
+                policyVersion, now, auctionTerms, scheduleAuctionAt(now)
         );
+    }
+
+    // 네덜란드식 이벤트 상품. 관리자가 오픈 시각을 직접 정한다. (지금보다 뒤여야 한다)
+    // 오픈 시각이 되면 영국식과 같은 스케줄러가 경매를 요청한다.
+    public static Product createDutch(ProductMember admin, String name, ProductCategory category,
+                                      Manufacturer manufacturer, String manufacturerEtc, String description,
+                                      ShippingFeeType shippingFeeType, Long customShippingFee, boolean bundleShipping,
+                                      LocalDateTime now, ProductAuctionTerms dutchTerms, LocalDateTime openAt) {
+        if (!dutchTerms.isDutch()) {
+            throw new IllegalArgumentException("네덜란드식 경매 조건이 아닙니다.");
+        }
+        if (!openAt.isAfter(now)) {
+            throw new BusinessException(ProductErrorCode.INVALID_DUTCH_OPEN_AT);
+        }
+        return new Product(
+                admin, name, category,
+                manufacturer, resolveManufacturerEtc(manufacturer, manufacturerEtc), description,
+                shippingFeeType, shippingFeeType.resolveFee(customShippingFee), bundleShipping,
+                PLATFORM_POLICY_VERSION, now, dutchTerms, openAt
+        );
+    }
+
+    public boolean isDutch() {
+        return auctionTerms.isDutch();
     }
 
     // 삭제되지 않았고, 아직 경매를 요청하지 않았고, 시작 예정 시각이 되었으면 경매를 요청할 수 있다.
@@ -228,10 +256,20 @@ public class Product extends BaseIdAndTime {
         return shippingFeeType == ShippingFeeType.CUSTOM ? shippingFee : null;
     }
 
+    // 판매자 수정/삭제 API로 바꿀 수 있는지 ('내 상품' 화면의 수정 버튼용)
+    // 네덜란드식은 관리자가 여는 이벤트라 판매자 API로는 바꿀 수 없다.
+    public boolean isSellerEditable(LocalDateTime now) {
+        return !isDutch() && isEditable(now);
+    }
+
     // 본인 상품이고, 경매 요청 전이면서 시작 예정 시각 전일 때만 수정/삭제할 수 있다.
+    // 네덜란드식 이벤트 상품은 판매자 수정/삭제 API로 바꿀 수 없다. (관리자 수정/취소는 별도 기능)
     public void validateEditable(Long sellerId, LocalDateTime now) {
         if (!seller.getId().equals(sellerId)) {
             throw new BusinessException(ProductErrorCode.NOT_PRODUCT_OWNER);
+        }
+        if (isDutch()) {
+            throw new BusinessException(ProductErrorCode.DUTCH_NOT_SELLER_EDITABLE);
         }
         if (!isEditable(now)) {
             throw new BusinessException(ProductErrorCode.NOT_EDITABLE);
