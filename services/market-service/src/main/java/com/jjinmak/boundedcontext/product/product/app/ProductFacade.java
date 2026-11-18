@@ -2,14 +2,15 @@ package com.jjinmak.boundedcontext.product.product.app;
 
 import com.jjinmak.boundedcontext.product.product.domain.Product;
 import com.jjinmak.boundedcontext.product.product.domain.ProductMember;
+import com.jjinmak.boundedcontext.product.product.in.dto.ProductAuctionOpenDto;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductCreateRequestDto;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductDetailDto;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductDutchCreateRequestDto;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductMyListResponseDto;
+import com.jjinmak.boundedcontext.product.product.in.dto.ProductRelistDto;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductUpcomingListResponseDto;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductUpdateRequestDto;
 import com.jjinmak.contracts.auction.event.AuctionFailedEvent;
-import com.jjinmak.contracts.auction.event.AuctionStartedEvent;
 import com.jjinmak.contracts.auction.event.AuctionWonEvent;
 import com.jjinmak.contracts.member.dto.MemberDto;
 import com.jjinmak.contracts.product.dto.ProductSummaryDto;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +37,7 @@ public class ProductFacade {
     private final ProductReadDetailUseCase productReadDetailUseCase;
     private final ProductReadUpcomingUseCase productReadUpcomingUseCase;
     private final ProductStartAuctionUseCase productStartAuctionUseCase;
+    private final ProductRelistUseCase productRelistUseCase;
     private final ProductAuctionResultUseCase productAuctionResultUseCase;
     private final ProductReadMineUseCase productReadMineUseCase;
 
@@ -68,21 +71,21 @@ public class ProductFacade {
         return productRequestAuctionUseCase.findTargetIds(now);
     }
 
-    // 상품마다 별도 트랜잭션으로 처리해서, 하나가 실패해도 다른 상품은 경매로 넘어간다.
+    // market 경매 시작 흐름(MarketAuctionOpenUseCase)의 트랜잭션에 참여한다.
     @Transactional
-    public void requestAuction(Long productId, LocalDateTime now){
-        productRequestAuctionUseCase.requestAuction(productId, now);
+    public Optional<ProductAuctionOpenDto> prepareAuctionOpen(Long productId, LocalDateTime now){
+        return productRequestAuctionUseCase.prepareAuctionOpen(productId, now);
     }
 
-    @Transactional(readOnly = true)
-    public List<Long> findAuctionResendTargetIds(LocalDateTime now){
-        return productRequestAuctionUseCase.findResendTargetIds(now);
+    @Transactional
+    public void startAuction(Long productId, Long auctionId, LocalDateTime endAt){
+        productStartAuctionUseCase.startAuction(productId, auctionId, endAt);
     }
 
-    // 이벤트는 커밋 후 전송되므로 저장할 것이 없어도 트랜잭션 안에서 실행한다.
+    // market 재등록 흐름(MarketRelistUseCase)의 트랜잭션에 참여한다.
     @Transactional
-    public void resendAuction(Long productId){
-        productRequestAuctionUseCase.resendAuction(productId);
+    public ProductRelistDto relist(Long sellerId, Long productId, LocalDateTime now){
+        return productRelistUseCase.relist(sellerId, productId, now);
     }
 
     @Transactional(readOnly = true)
@@ -108,11 +111,6 @@ public class ProductFacade {
     @Transactional(readOnly = true)
     public ProductDetailDto readDetail(Long memberId, Long productId){
         return productReadDetailUseCase.readDetail(memberId, productId);
-    }
-
-    @Transactional
-    public void startAuction(AuctionStartedEvent event){
-        productStartAuctionUseCase.startAuction(event);
     }
 
     @Transactional

@@ -24,11 +24,17 @@ import static com.jjinmak.boundedcontext.auction.exception.AuctionErrorCode.*;
 @Table(indexes = {
         @Index(name = "idx_auction_status_end_at", columnList = "status, end_at"),
         @Index(name = "idx_auction_status_category_end_at", columnList = "status, category, end_at")
+}, uniqueConstraints = {
+        @UniqueConstraint(name = "uk_auction_product_round", columnNames = {"product_id", "round"})
 })
 public abstract class Auction extends BaseIdAndTime {
 
     @Column(nullable = false)
     private Long productId;
+
+    // 같은 상품의 몇 번째 경매인지 (재등록하면 1씩 늘어난다)
+    @Column(nullable = false)
+    private int round;
 
     @Column(nullable = false)
     private Long sellerId;
@@ -64,10 +70,14 @@ public abstract class Auction extends BaseIdAndTime {
     @Version
     private Long version;
 
-    protected Auction(Long productId, Long sellerId, Long startPrice,
+    protected Auction(Long productId, int round, Long sellerId, Long startPrice,
                     Long shippingFee, String category,
                     LocalDateTime startAt, LocalDateTime endAt) {
+        if (round < 1) {
+            throw new IllegalArgumentException("경매 회차는 1 이상이어야 합니다. round=" + round);
+        }
         this.productId = productId;
+        this.round = round;
         this.sellerId = sellerId;
         this.startPrice = startPrice;
         this.shippingFee = shippingFee;
@@ -111,6 +121,12 @@ public abstract class Auction extends BaseIdAndTime {
         validateStatus(PAID);
         this.status = COMPLETED;
     }
+    // 유찰(입찰 없음)이거나 낙찰 후 미결제로 무효가 된 경매만 다음 회차로 다시 열 수 있다.
+    // 환불은 거래가 한 번 성사된 것이라 제외한다.
+    public boolean isRelistable() {
+        return status == FAILED && failureReason != FailureReason.REFUNDED;
+    }
+
     private void validateStatus(AuctionStatus expected) {
         if (this.status != expected) {
             throw new BusinessException(INVALID_STATUS_TRANSITION);

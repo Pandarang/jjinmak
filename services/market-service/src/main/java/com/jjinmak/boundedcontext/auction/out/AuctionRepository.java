@@ -15,9 +15,11 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction,Long> {
-    boolean existsByProductId(Long productId);
+    // 같은 상품의 해당 회차 경매 (product_id, round 유니크)
+    Optional<Auction> findByProductIdAndRound(Long productId, int round);
 
     @Query(
             """
