@@ -1,10 +1,10 @@
 package com.jjinmak.boundedcontext.market.app;
 
+import com.jjinmak.boundedcontext.market.shared.domain.AuctionType;
 import com.jjinmak.boundedcontext.auction.app.AuctionFacade;
 import com.jjinmak.boundedcontext.auction.dto.AuctionCreateDto;
 import com.jjinmak.boundedcontext.auction.dto.AuctionCreateResultDto;
 import com.jjinmak.boundedcontext.product.product.app.ProductFacade;
-import com.jjinmak.boundedcontext.product.product.domain.AuctionType;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductAuctionOpenDto;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,17 +45,17 @@ class MarketAuctionOpenUseCaseTest {
         given(productFacade.prepareAuctionOpen(PRODUCT_ID, NOW)).willReturn(Optional.of(
                 new ProductAuctionOpenDto(PRODUCT_ID, 1, 100L, AuctionType.ENGLISH, 10_000L, 3_000L, "CONSOLE",
                         NOW, 80_000L, endAt, null, null, null)));
-        given(auctionFacade.createAuction(any())).willReturn(new AuctionCreateResultDto(AUCTION_ID, endAt));
+        given(auctionFacade.createAuction(any())).willReturn(new AuctionCreateResultDto(AUCTION_ID));
 
         useCase.openAuction(PRODUCT_ID, NOW);
 
         AuctionCreateDto dto = 경매_생성_요청();
-        assertThat(dto.auctionType()).isEqualTo(com.jjinmak.boundedcontext.auction.domain.AuctionType.ENGLISH);
+        assertThat(dto.auctionType()).isEqualTo(AuctionType.ENGLISH);
         assertThat(dto.round()).isEqualTo(1);
         assertThat(dto.startAt()).isEqualTo(NOW);
         assertThat(dto.endAt()).isEqualTo(endAt);
         assertThat(dto.instantWinPrice()).isEqualTo(80_000L);
-        then(productFacade).should().startAuction(PRODUCT_ID, AUCTION_ID, endAt);
+        then(productFacade).should().startAuction(PRODUCT_ID, AUCTION_ID);
     }
 
     @Test
@@ -63,17 +63,17 @@ class MarketAuctionOpenUseCaseTest {
         given(productFacade.prepareAuctionOpen(PRODUCT_ID, NOW)).willReturn(Optional.of(
                 new ProductAuctionOpenDto(PRODUCT_ID, 1, 100L, AuctionType.DUTCH, 300_000L, 3_000L, "CONSOLE",
                         NOW, null, null, 150_000L, 2, 60)));
-        given(auctionFacade.createAuction(any())).willReturn(new AuctionCreateResultDto(AUCTION_ID, null));
+        given(auctionFacade.createAuction(any())).willReturn(new AuctionCreateResultDto(AUCTION_ID));
 
         useCase.openAuction(PRODUCT_ID, NOW);
 
         AuctionCreateDto dto = 경매_생성_요청();
-        assertThat(dto.auctionType()).isEqualTo(com.jjinmak.boundedcontext.auction.domain.AuctionType.DUTCH);
+        assertThat(dto.auctionType()).isEqualTo(AuctionType.DUTCH);
         assertThat(dto.startAt()).isEqualTo(NOW);
         assertThat(dto.floorPrice()).isEqualTo(150_000L);
         assertThat(dto.dropRatePercent()).isEqualTo(2);
         assertThat(dto.dropIntervalSec()).isEqualTo(60);
-        then(productFacade).should().startAuction(PRODUCT_ID, AUCTION_ID, null);
+        then(productFacade).should().startAuction(PRODUCT_ID, AUCTION_ID);
     }
 
     @Test
@@ -83,6 +83,6 @@ class MarketAuctionOpenUseCaseTest {
         useCase.openAuction(PRODUCT_ID, NOW);
 
         then(auctionFacade).shouldHaveNoInteractions();
-        then(productFacade).should(org.mockito.Mockito.never()).startAuction(any(), any(), any());
+        then(productFacade).should(org.mockito.Mockito.never()).startAuction(any(), any());
     }
 }

@@ -1,7 +1,6 @@
 package com.jjinmak.boundedcontext.product.product.app;
 
 import com.jjinmak.boundedcontext.product.product.domain.Product;
-import com.jjinmak.boundedcontext.product.product.domain.ProductMember;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductAuctionOpenDto;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductCreateRequestDto;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductDetailDto;
@@ -10,9 +9,6 @@ import com.jjinmak.boundedcontext.product.product.in.dto.ProductMyListResponseDt
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductRelistDto;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductUpcomingListResponseDto;
 import com.jjinmak.boundedcontext.product.product.in.dto.ProductUpdateRequestDto;
-import com.jjinmak.contracts.auction.event.AuctionFailedEvent;
-import com.jjinmak.contracts.auction.event.AuctionWonEvent;
-import com.jjinmak.contracts.member.dto.MemberDto;
 import com.jjinmak.contracts.product.dto.ProductSummaryDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,7 +23,6 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ProductFacade {
 
-    private final ProductSyncMemberUseCase productSyncMemberUseCase;
     private final ProductCreateUseCase productCreateUseCase;
     private final ProductDutchCreateUseCase productDutchCreateUseCase;
     private final ProductUpdateUseCase productUpdateUseCase;
@@ -38,13 +33,7 @@ public class ProductFacade {
     private final ProductReadUpcomingUseCase productReadUpcomingUseCase;
     private final ProductStartAuctionUseCase productStartAuctionUseCase;
     private final ProductRelistUseCase productRelistUseCase;
-    private final ProductAuctionResultUseCase productAuctionResultUseCase;
     private final ProductReadMineUseCase productReadMineUseCase;
-
-    @Transactional
-    public ProductMember syncMember(MemberDto memberDto){
-        return productSyncMemberUseCase.syncMember(memberDto);
-    }
 
     @Transactional
     public Product createProduct(Long sellerId, ProductCreateRequestDto request){
@@ -78,8 +67,8 @@ public class ProductFacade {
     }
 
     @Transactional
-    public void startAuction(Long productId, Long auctionId, LocalDateTime endAt){
-        productStartAuctionUseCase.startAuction(productId, auctionId, endAt);
+    public void startAuction(Long productId, Long auctionId){
+        productStartAuctionUseCase.startAuction(productId, auctionId);
     }
 
     // market 재등록 흐름(MarketRelistUseCase)의 트랜잭션에 참여한다.
@@ -111,15 +100,5 @@ public class ProductFacade {
     @Transactional(readOnly = true)
     public ProductDetailDto readDetail(Long memberId, Long productId){
         return productReadDetailUseCase.readDetail(memberId, productId);
-    }
-
-    @Transactional
-    public void markAuctionSold(AuctionWonEvent event){
-        productAuctionResultUseCase.markSold(event);
-    }
-
-    @Transactional
-    public void markAuctionFailed(AuctionFailedEvent event){
-        productAuctionResultUseCase.markFailed(event);
     }
 }

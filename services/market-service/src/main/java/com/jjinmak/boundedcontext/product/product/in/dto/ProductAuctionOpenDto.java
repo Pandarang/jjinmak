@@ -1,6 +1,6 @@
 package com.jjinmak.boundedcontext.product.product.in.dto;
 
-import com.jjinmak.boundedcontext.product.product.domain.AuctionType;
+import com.jjinmak.boundedcontext.market.shared.domain.AuctionType;
 import com.jjinmak.boundedcontext.product.product.domain.Product;
 import com.jjinmak.boundedcontext.product.product.domain.ProductAuctionTerms;
 
@@ -36,7 +36,7 @@ public record ProductAuctionOpenDto(
 
         return new ProductAuctionOpenDto(
                 product.getId(),
-                product.getAuctionRound(),
+                product.getRound(),
                 product.getSeller().getId(),
                 terms.getAuctionType(),
                 terms.getStartPrice(),

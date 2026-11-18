@@ -1,5 +1,6 @@
 package com.jjinmak.boundedcontext.product.product.domain;
 
+import com.jjinmak.boundedcontext.market.shared.domain.MarketMember;
 import com.jjinmak.contracts.product.domain.Manufacturer;
 import com.jjinmak.contracts.product.domain.ProductCategory;
 import org.junit.jupiter.api.Test;
@@ -18,7 +19,7 @@ class ProductRelistTest {
 
     private Product 상품(AuctionDuration duration, LocalDateTime customEndAt) {
         ProductAuctionTerms terms = ProductAuctionTerms.create(10_000L, null, duration, customEndAt, SCHEDULED_AT);
-        return Product.create(new ProductMember(SELLER_ID, "판매자"), "스위치", ProductCategory.CONSOLE,
+        return Product.create(new MarketMember(SELLER_ID, "판매자"), "스위치", ProductCategory.CONSOLE,
                 Manufacturer.NINTENDO, null, "설명", ShippingFeeType.FREE, null, false,
                 "v1", CREATED_AT, terms);
     }
@@ -26,7 +27,7 @@ class ProductRelistTest {
     private Product 경매가_열렸던_상품(AuctionDuration duration, LocalDateTime customEndAt) {
         Product product = 상품(duration, customEndAt);
         product.requestAuction(SCHEDULED_AT);
-        product.startAuction(10L, product.getAuctionTerms().resolveEndAt(SCHEDULED_AT));
+        product.startAuction(10L);
         return product;
     }
 
@@ -36,10 +37,9 @@ class ProductRelistTest {
 
         LocalDateTime endAt = product.relist(SELLER_ID, RELIST_AT);
 
-        assertThat(product.getAuctionRound()).isEqualTo(2);
+        assertThat(product.getRound()).isEqualTo(2);
         assertThat(product.getAuctionScheduledAt()).isEqualTo(RELIST_AT);
         assertThat(product.getCurrentAuctionId()).isNull();
-        assertThat(product.getAuctionStatus()).isEqualTo(ProductAuctionStatus.SCHEDULED);
         assertThat(endAt).isEqualTo(RELIST_AT.plusDays(3));
         assertThat(product.isAuctionRequestable(RELIST_AT)).isFalse();   // 스케줄러가 다시 열지 않는다
     }
@@ -54,14 +54,13 @@ class ProductRelistTest {
     }
 
     @Test
-    void 새_회차_경매가_생성되면_진행_중이_된다() {
+    void 새_회차_경매가_생성되면_그_경매를_가리킨다() {
         Product product = 경매가_열렸던_상품(AuctionDuration.DAYS_1, null);
-        LocalDateTime endAt = product.relist(SELLER_ID, RELIST_AT);
+        product.relist(SELLER_ID, RELIST_AT);
 
-        product.startAuction(20L, endAt);
+        product.startAuction(20L);
 
         assertThat(product.getCurrentAuctionId()).isEqualTo(20L);
-        assertThat(product.getAuctionStatus()).isEqualTo(ProductAuctionStatus.IN_PROGRESS);
     }
 
     @Test
@@ -74,11 +73,11 @@ class ProductRelistTest {
 
     @Test
     void 네덜란드식_이벤트_상품은_재등록할_수_없다() {
-        Product product = Product.createDutch(new ProductMember(SELLER_ID, "관리자"), "스위치", ProductCategory.CONSOLE,
+        Product product = Product.createDutch(new MarketMember(SELLER_ID, "관리자"), "스위치", ProductCategory.CONSOLE,
                 Manufacturer.NINTENDO, null, "설명", ShippingFeeType.FREE, null, false, CREATED_AT,
                 ProductAuctionTerms.createDutch(300_000L, 150_000L, 2, 60), SCHEDULED_AT);
         product.requestAuction(SCHEDULED_AT);
-        product.startAuction(10L, null);
+        product.startAuction(10L);
 
         assertThatThrownBy(() -> product.relist(SELLER_ID, RELIST_AT))
                 .extracting("errorCode").isEqualTo(ProductErrorCode.DUTCH_NOT_RELISTABLE);
