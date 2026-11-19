@@ -13,17 +13,20 @@ public record SocialLoginResponseDto(
         Boolean suspended,
 
         @Schema(description = "가입 대기 토큰 (SIGNUP_REQUIRED 일 때만). 추가 정보와 함께 가입 API 로 보낸다")
-        String signupToken
+        String signupToken,
+
+        @Schema(description = "카카오가 인증한 이메일 (SIGNUP_REQUIRED 일 때만). 있으면 이 이메일로 가입되므로 화면에서 수정할 수 없게 한다. 없으면 null 이며 직접 입력받는다")
+        String email
 ) {
     public enum Status {
         LOGIN, SIGNUP_REQUIRED
     }
 
     public static SocialLoginResponseDto loggedIn(String accessToken, boolean suspended) {
-        return new SocialLoginResponseDto(Status.LOGIN, accessToken, suspended, null);
+        return new SocialLoginResponseDto(Status.LOGIN, accessToken, suspended, null, null);
     }
 
-    public static SocialLoginResponseDto signupRequired(String signupToken) {
-        return new SocialLoginResponseDto(Status.SIGNUP_REQUIRED, null, null, signupToken);
+    public static SocialLoginResponseDto signupRequired(String signupToken, String email) {
+        return new SocialLoginResponseDto(Status.SIGNUP_REQUIRED, null, null, signupToken, email);
     }
 }
