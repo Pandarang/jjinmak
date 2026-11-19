@@ -79,8 +79,8 @@ class AuctionRetrySupportTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(AuctionErrorCode.BID_CONFLICT);
 
-        assertThat(calls).hasValue(AuctionRetrySupport.MAX_ATTEMPTS);
-        assertThat(sleeps).hasSize(AuctionRetrySupport.MAX_ATTEMPTS - 1);
+        assertThat(calls).hasValue(Operation.BID.maxAttempts());
+        assertThat(sleeps).hasSize(Operation.BID.maxAttempts() - 1);
         assertThat(sleeps.get(1)).isBetween(AuctionRetrySupport.MIN_BACKOFF_MS * 2, AuctionRetrySupport.MAX_BACKOFF_MS * 2);
         assertThat(requests("bid", "exhausted")).isEqualTo(1);
     }
@@ -147,6 +147,38 @@ class AuctionRetrySupportTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(AuctionErrorCode.BID_CONFLICT);
         assertThat(Thread.currentThread().isInterrupted()).isTrue();
+    }
+
+    @Test
+    void 즉시낙찰은_다섯_번까지_시도한다() {
+        // 즉시낙찰 1건이 입찰 수십 건과 겹치면 3회로는 소진될 수 있다(CT-04 9/10)
+        String result = retrySupport.execute(Operation.INSTANT_WIN, failTimes(4, "won"));
+
+        assertThat(result).isEqualTo("won");
+        assertThat(attempts("instant_win")).isEqualTo(5);
+        assertThat(sleeps).hasSize(4);
+    }
+
+    @Test
+    void 즉시낙찰도_다섯_번_모두_충돌하면_AUCTION008로_끝난다() {
+        assertThatThrownBy(() -> retrySupport.execute(Operation.INSTANT_WIN, failTimes(5, "won")))
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(AuctionErrorCode.BID_CONFLICT);
+        assertThat(requests("instant_win", "exhausted")).isEqualTo(1);
+    }
+
+    @Test
+    void 카운터는_쓰기_전에_0으로_미리_등록된다() {
+        // 처음 쓰일 때 만들면 Prometheus increase()가 첫 증가분(예: 첫 소진 1건)을 놓친다
+        for (String operation : new String[]{"bid", "instant_win"}) {
+            assertThat(registry.find("auction.retry.attempts").tag("operation", operation).counter()).isNotNull();
+            for (String result : new String[]{"success", "rejected", "exhausted"}) {
+                assertThat(registry.find("auction.retry.requests")
+                        .tag("operation", operation).tag("result", result).counter())
+                        .isNotNull()
+                        .extracting(c -> c.count()).isEqualTo(0.0);
+            }
+        }
     }
 
     private Supplier<String> failTimes(int failures, String result) {
