@@ -1,0 +1,86 @@
+package com.jjinmak.back.refund.app;
+
+import com.jjinmak.back.refund.domain.RefundOutbox;
+import com.jjinmak.contracts.order.event.OrderRefundRequestedEvent;
+import com.jjinmak.contracts.payment.event.WalletRefundedEvent;
+import com.jjinmak.contracts.refund.dto.RefundDto;
+import com.jjinmak.back.refund.app.RefundAcceptRefundUseCase;
+import com.jjinmak.back.refund.app.RefundCreateRefundUseCase;
+import com.jjinmak.back.refund.app.RefundRejectRefundUseCase;
+import com.jjinmak.back.refund.domain.RefundRetryResult;
+import com.jjinmak.back.refund.in.dto.RefundDetailDto;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class RefundFacade {
+
+    private final RefundCreateRefundUseCase refundCreateRefundUseCase;
+    private final RefundGetRefundUseCase refundGetRefundUseCase;
+    private final RefundRejectRefundUseCase refundRejectRefundUseCase;
+    private final RefundAcceptRefundUseCase refundAcceptRefundUseCase;
+    private final RefundGetRefundByOrderUseCase refundGetRefundByOrderUseCase;
+    private final RefundCompleteRefundUseCase refundCompleteRefundUseCase;
+    private final RefundRetryRefundUseCase refundRetryRefundUseCase;
+    private final RefundOutboxUseCase refundOutboxUseCase;
+
+    @Transactional
+    public void createRefund(OrderRefundRequestedEvent event) {
+        refundCreateRefundUseCase.createRefund(event);
+    }
+
+    @Transactional(readOnly = true)
+    public RefundDetailDto getRefund(Long memberId, Long refundId) {
+        return refundGetRefundUseCase.getRefund(memberId, refundId).detailDto();
+    }
+
+    @Transactional
+    public RefundDto rejectRefund(Long memberId, Long refundId) {
+        return refundRejectRefundUseCase.rejectRefund(memberId, refundId).dto();
+    }
+
+    @Transactional
+    public RefundDto acceptRefund(Long memberId, Long refundId) {
+        return refundAcceptRefundUseCase.acceptRefund(memberId, refundId).dto();
+    }
+
+    @Transactional(readOnly = true)
+    public RefundDetailDto getRefundByOrder(Long memberId, Long orderId) {
+        return refundGetRefundByOrderUseCase.getRefundByOrder(memberId, orderId).detailDto();
+    }
+
+    @Transactional
+    public void completeRefund(WalletRefundedEvent event) {
+        refundCompleteRefundUseCase.completeRefund(event);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> findRetryTargetIds(LocalDateTime before) {
+        return refundRetryRefundUseCase.findRetryTargetIds(before);
+    }
+
+    @Transactional
+    public RefundRetryResult retryRefund(Long refundId) {
+        return refundRetryRefundUseCase.retryRefund(refundId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<RefundOutbox> findUnpublishedOutboxes() {
+        return refundOutboxUseCase.findUnpublished();
+    }
+
+    // 트랜잭션 없음: Kafka 응답을 기다리는 동안 DB 커넥션을 잡고 있지 않으려고
+    public void sendOutbox(RefundOutbox outbox) {
+        refundOutboxUseCase.send(outbox);
+    }
+
+    @Transactional
+    public void markOutboxPublished(Long outboxId) {
+        refundOutboxUseCase.markPublished(outboxId);
+    }
+}

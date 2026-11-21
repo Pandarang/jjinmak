@@ -7,6 +7,7 @@ data:
   DB_URL: jdbc:postgresql://postgres.infra.svc.cluster.local:5432/member_db
   KAFKA_BOOTSTRAP_SERVERS: kafka.infra.svc.cluster.local:19092
   CORS_ALLOWED_ORIGINS: https://jjinmak.kro.kr
+  KAKAO_REDIRECT_URI: https://jjinmak.kro.kr/oauth/kakao/callback
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -29,7 +30,8 @@ spec:
         - name: member-service
           image: ghcr.io/prgrms-be-adv-devcourse/beadv8_8_ahjb_be/member-service:bb2970ed59aa04f7570469ec13c81572a3bf656b
           ports:
-            - containerPort: 8083
+            - name: http
+              containerPort: 8083
           envFrom:
             - configMapRef:
                 name: member-config
@@ -37,6 +39,18 @@ spec:
                 name: member-db-secret
             - secretRef:
                 name: member-jwt-secret
+            # KAKAO_CLIENT_ID, KAKAO_CLIENT_SECRET, OAUTH_SIGNUP_SECRET (배포 전에 수동 생성 필요)
+            - secretRef:
+                name: member-oauth-secret
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=60 -XX:+ExitOnOutOfMemoryError"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 768Mi
 ---
 apiVersion: v1
 kind: Service

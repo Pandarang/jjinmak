@@ -1,0 +1,312 @@
+package com.jjinmak.back.order.in;
+
+import com.jjinmak.common.exception.BusinessException;
+import com.jjinmak.back.order.app.OrderFacade;
+import com.jjinmak.back.order.domain.OrderOutbox;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.List;
+
+import static com.jjinmak.back.order.exception.OrderErrorCode.CART_ITEM_NOT_FOUND;
+import static com.jjinmak.back.order.exception.OrderErrorCode.ORDER_STATE_BAD_REQUEST;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class OrderSchedulerTest {
+
+    @Mock
+    OrderFacade orderFacade;
+
+    @InjectMocks
+    OrderScheduler orderScheduler;
+
+    @Test
+    @DisplayName("한 건이 업무 예외로 실패해도 나머지 만료 장바구니 항목을 계속 처리한다")
+    void deleteDefaultPayment_continuesAfterBusinessException() {
+        when(orderFacade.findExpiredItemIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new BusinessException(CART_ITEM_NOT_FOUND)).when(orderFacade).deleteExpiredItem(2L);
+
+        orderScheduler.deleteDefaultPayment();
+
+        verify(orderFacade).deleteExpiredItem(1L);
+        verify(orderFacade).deleteExpiredItem(2L);
+        verify(orderFacade).deleteExpiredItem(3L);
+    }
+
+    @Test
+    @DisplayName("한 건이 예상하지 못한 예외로 실패해도 나머지 만료 장바구니 항목을 계속 처리한다")
+    void deleteDefaultPayment_continuesAfterUnexpectedException() {
+        when(orderFacade.findExpiredItemIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new IllegalStateException("예상하지 못한 오류")).when(orderFacade).deleteExpiredItem(2L);
+
+        orderScheduler.deleteDefaultPayment();
+
+        verify(orderFacade).deleteExpiredItem(1L);
+        verify(orderFacade).deleteExpiredItem(2L);
+        verify(orderFacade).deleteExpiredItem(3L);
+    }
+
+    @Test
+    @DisplayName("만료 장바구니 항목이 없으면 아무것도 삭제하지 않는다")
+    void deleteDefaultPayment_noTargets() {
+        when(orderFacade.findExpiredItemIds()).thenReturn(List.of());
+
+        orderScheduler.deleteDefaultPayment();
+
+        verify(orderFacade, never()).deleteExpiredItem(anyLong());
+    }
+
+    @Test
+    @DisplayName("한 건이 업무 예외로 실패해도 나머지 만료 주문을 계속 자동 구매 확정한다")
+    void confirmPurchaseAuto_continuesAfterBusinessException() {
+        when(orderFacade.getExpiredOrderIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new BusinessException(ORDER_STATE_BAD_REQUEST)).when(orderFacade).confirmPurchaseAuto(2L);
+
+        orderScheduler.confirmPurchaseAuto();
+
+        verify(orderFacade).confirmPurchaseAuto(1L);
+        verify(orderFacade).confirmPurchaseAuto(2L);
+        verify(orderFacade).confirmPurchaseAuto(3L);
+    }
+
+    @Test
+    @DisplayName("한 건이 예상하지 못한 예외로 실패해도 나머지 만료 주문을 계속 자동 구매 확정한다")
+    void confirmPurchaseAuto_continuesAfterUnexpectedException() {
+        when(orderFacade.getExpiredOrderIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new IllegalStateException("예상하지 못한 오류")).when(orderFacade).confirmPurchaseAuto(2L);
+
+        orderScheduler.confirmPurchaseAuto();
+
+        verify(orderFacade).confirmPurchaseAuto(1L);
+        verify(orderFacade).confirmPurchaseAuto(2L);
+        verify(orderFacade).confirmPurchaseAuto(3L);
+    }
+
+    @Test
+    @DisplayName("만료 주문이 없으면 아무것도 자동 구매 확정하지 않는다")
+    void confirmPurchaseAuto_noTargets() {
+        when(orderFacade.getExpiredOrderIds()).thenReturn(List.of());
+
+        orderScheduler.confirmPurchaseAuto();
+
+        verify(orderFacade, never()).confirmPurchaseAuto(anyLong());
+    }
+
+    @Test
+    @DisplayName("한 건이 업무 예외로 실패해도 나머지 미발송 주문에 계속 시스템 환불을 요청한다")
+    void refundNonShippedOrder_continuesAfterBusinessException() {
+        when(orderFacade.getNonShippedOrderIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new BusinessException(ORDER_STATE_BAD_REQUEST)).when(orderFacade).requestSystemRefund(2L);
+
+        orderScheduler.refundNonShippedOrder();
+
+        verify(orderFacade).requestSystemRefund(1L);
+        verify(orderFacade).requestSystemRefund(2L);
+        verify(orderFacade).requestSystemRefund(3L);
+    }
+
+    @Test
+    @DisplayName("한 건이 예상하지 못한 예외로 실패해도 나머지 미발송 주문에 계속 시스템 환불을 요청한다")
+    void refundNonShippedOrder_continuesAfterUnexpectedException() {
+        when(orderFacade.getNonShippedOrderIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new IllegalStateException("예상하지 못한 오류")).when(orderFacade).requestSystemRefund(2L);
+
+        orderScheduler.refundNonShippedOrder();
+
+        verify(orderFacade).requestSystemRefund(1L);
+        verify(orderFacade).requestSystemRefund(2L);
+        verify(orderFacade).requestSystemRefund(3L);
+    }
+
+    @Test
+    @DisplayName("미발송 주문이 없으면 아무것도 시스템 환불을 요청하지 않는다")
+    void refundNonShippedOrder_noTargets() {
+        when(orderFacade.getNonShippedOrderIds()).thenReturn(List.of());
+
+        orderScheduler.refundNonShippedOrder();
+
+        verify(orderFacade, never()).requestSystemRefund(anyLong());
+    }
+
+    @Test
+    @DisplayName("한 건이 업무 예외로 실패해도 나머지 결제 임박 항목에 계속 알림을 보낸다")
+    void remindPayment_continuesAfterBusinessException() {
+        when(orderFacade.findPaymentDueSoonItemIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new BusinessException(CART_ITEM_NOT_FOUND)).when(orderFacade).sendPaymentDueSoonReminder(2L);
+
+        orderScheduler.remindPayment();
+
+        verify(orderFacade).sendPaymentDueSoonReminder(1L);
+        verify(orderFacade).sendPaymentDueSoonReminder(2L);
+        verify(orderFacade).sendPaymentDueSoonReminder(3L);
+    }
+
+    @Test
+    @DisplayName("한 건이 예상하지 못한 예외로 실패해도 나머지 결제 임박 항목에 계속 알림을 보낸다")
+    void remindPayment_continuesAfterUnexpectedException() {
+        when(orderFacade.findPaymentDueSoonItemIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new IllegalStateException("예상하지 못한 오류")).when(orderFacade).sendPaymentDueSoonReminder(2L);
+
+        orderScheduler.remindPayment();
+
+        verify(orderFacade).sendPaymentDueSoonReminder(1L);
+        verify(orderFacade).sendPaymentDueSoonReminder(2L);
+        verify(orderFacade).sendPaymentDueSoonReminder(3L);
+    }
+
+    @Test
+    @DisplayName("결제 임박 항목이 없으면 아무 알림도 보내지 않는다")
+    void remindPayment_noTargets() {
+        when(orderFacade.findPaymentDueSoonItemIds()).thenReturn(List.of());
+
+        orderScheduler.remindPayment();
+
+        verify(orderFacade, never()).sendPaymentDueSoonReminder(anyLong());
+    }
+
+    @Test
+    @DisplayName("한 건이 업무 예외로 실패해도 나머지 구매 확정 임박 주문에 계속 알림을 보낸다")
+    void remindAutoConfirm_continuesAfterBusinessException() {
+        when(orderFacade.findExpiredSoonOrderIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new BusinessException(ORDER_STATE_BAD_REQUEST)).when(orderFacade).sendAutoConfirmReminder(2L);
+
+        orderScheduler.remindAutoConfirm();
+
+        verify(orderFacade).sendAutoConfirmReminder(1L);
+        verify(orderFacade).sendAutoConfirmReminder(2L);
+        verify(orderFacade).sendAutoConfirmReminder(3L);
+    }
+
+    @Test
+    @DisplayName("한 건이 예상하지 못한 예외로 실패해도 나머지 구매 확정 임박 주문에 계속 알림을 보낸다")
+    void remindAutoConfirm_continuesAfterUnexpectedException() {
+        when(orderFacade.findExpiredSoonOrderIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new IllegalStateException("예상하지 못한 오류")).when(orderFacade).sendAutoConfirmReminder(2L);
+
+        orderScheduler.remindAutoConfirm();
+
+        verify(orderFacade).sendAutoConfirmReminder(1L);
+        verify(orderFacade).sendAutoConfirmReminder(2L);
+        verify(orderFacade).sendAutoConfirmReminder(3L);
+    }
+
+    @Test
+    @DisplayName("구매 확정 임박 주문이 없으면 아무 알림도 보내지 않는다")
+    void remindAutoConfirm_noTargets() {
+        when(orderFacade.findExpiredSoonOrderIds()).thenReturn(List.of());
+
+        orderScheduler.remindAutoConfirm();
+
+        verify(orderFacade, never()).sendAutoConfirmReminder(anyLong());
+    }
+
+    @Test
+    @DisplayName("결제 대기 시간이 지난 주문 그룹을 하나씩 삭제한다")
+    void deleteOverWaitingOrder_deletesEachGroup() {
+        when(orderFacade.findOverWaitingGroupIds()).thenReturn(List.of(1L, 2L, 3L));
+
+        orderScheduler.deleteOverWaitingOrder();
+
+        verify(orderFacade).deleteOverWaitingGroup(1L);
+        verify(orderFacade).deleteOverWaitingGroup(2L);
+        verify(orderFacade).deleteOverWaitingGroup(3L);
+    }
+
+    @Test
+    @DisplayName("한 주문 그룹이 업무 예외로 실패해도 나머지 결제 대기 시간이 지난 주문 그룹을 계속 삭제한다")
+    void deleteOverWaitingOrder_continuesAfterBusinessException() {
+        when(orderFacade.findOverWaitingGroupIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new BusinessException(ORDER_STATE_BAD_REQUEST)).when(orderFacade).deleteOverWaitingGroup(2L);
+
+        orderScheduler.deleteOverWaitingOrder();
+
+        verify(orderFacade).deleteOverWaitingGroup(1L);
+        verify(orderFacade).deleteOverWaitingGroup(2L);
+        verify(orderFacade).deleteOverWaitingGroup(3L);
+    }
+
+    @Test
+    @DisplayName("한 주문 그룹이 예상하지 못한 예외로 실패해도 나머지 결제 대기 시간이 지난 주문 그룹을 계속 삭제한다")
+    void deleteOverWaitingOrder_continuesAfterUnexpectedException() {
+        when(orderFacade.findOverWaitingGroupIds()).thenReturn(List.of(1L, 2L, 3L));
+        lenient().doThrow(new IllegalStateException("예상하지 못한 오류")).when(orderFacade).deleteOverWaitingGroup(2L);
+
+        orderScheduler.deleteOverWaitingOrder();
+
+        verify(orderFacade).deleteOverWaitingGroup(1L);
+        verify(orderFacade).deleteOverWaitingGroup(2L);
+        verify(orderFacade).deleteOverWaitingGroup(3L);
+    }
+
+    @Test
+    @DisplayName("결제 대기 시간이 지난 주문 그룹이 없으면 아무것도 삭제하지 않는다")
+    void deleteOverWaitingOrder_noTargets() {
+        when(orderFacade.findOverWaitingGroupIds()).thenReturn(List.of());
+
+        orderScheduler.deleteOverWaitingOrder();
+
+        verify(orderFacade, never()).deleteOverWaitingGroup(anyLong());
+    }
+
+    @Test
+    @DisplayName("발행하지 않은 아웃박스를 순서대로 보내고, 한 건씩 보낸 뒤에 발행으로 표시한다")
+    void sendOutbox_sendsInOrderAndMarksAfterEachSend() {
+        OrderOutbox first = outbox(1L);
+        OrderOutbox second = outbox(2L);
+        when(orderFacade.findUnpublishedOutboxes()).thenReturn(List.of(first, second));
+
+        orderScheduler.sendOutbox();
+
+        InOrder inOrder = inOrder(orderFacade);
+        inOrder.verify(orderFacade).sendOutbox(first);
+        inOrder.verify(orderFacade).markOutboxPublished(1L);
+        inOrder.verify(orderFacade).sendOutbox(second);
+        inOrder.verify(orderFacade).markOutboxPublished(2L);
+    }
+
+    @Test
+    @DisplayName("아웃박스 전송이 실패하면 그 건은 발행으로 표시하지 않고, 그 회차의 나머지도 보내지 않는다")
+    void sendOutbox_stopsAtFirstFailure() {
+        OrderOutbox first = outbox(1L);
+        OrderOutbox second = outbox(2L);
+        OrderOutbox third = outbox(3L);
+        when(orderFacade.findUnpublishedOutboxes()).thenReturn(List.of(first, second, third));
+        lenient().doThrow(new IllegalStateException("broker down")).when(orderFacade).sendOutbox(second);
+
+        orderScheduler.sendOutbox();
+
+        verify(orderFacade).markOutboxPublished(1L);
+        verify(orderFacade, never()).markOutboxPublished(2L);
+        verify(orderFacade, never()).sendOutbox(third);
+    }
+
+    @Test
+    @DisplayName("발행하지 않은 아웃박스가 없으면 아무것도 보내지 않는다")
+    void sendOutbox_noTargets() {
+        when(orderFacade.findUnpublishedOutboxes()).thenReturn(List.of());
+
+        orderScheduler.sendOutbox();
+
+        verify(orderFacade, never()).sendOutbox(any());
+        verify(orderFacade, never()).markOutboxPublished(anyLong());
+    }
+
+    private OrderOutbox outbox(Long id) {
+        OrderOutbox outbox = new OrderOutbox("order.send-product", String.valueOf(id), "{}");
+        ReflectionTestUtils.setField(outbox, "id", id);
+        return outbox;
+    }
+}

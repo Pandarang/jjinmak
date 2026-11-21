@@ -1,0 +1,198 @@
+package com.jjinmak.back.payment.domain;
+
+import com.jjinmak.common.exception.BusinessException;
+import com.jjinmak.common.jpa.entity.BaseIdAndTime;
+import com.jjinmak.back.payment.domain.enums.HoldingStatus;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import java.time.LocalDateTime;
+
+import static com.jjinmak.back.payment.exception.WalletErrorCode.*;
+
+/**
+ * 주문 1건당 1개. 결제 시 구매자 지갑에서 빠져나간 대금이
+ * 판매자 정산 또는 구매자 환불 전까지 머무는 기록.
+ * 실제 잔액은 ESCROW 시스템 지갑에 있고, Holding은 "그 중 어느 주문 몫이 얼마인지"를 나타낸다.
+ * (HELD 상태 Holding의 amount 합계 == ESCROW 지갑 balance 가 항상 성립해야 한다.)
+ */
+@Entity
+@Table(
+        name = "holding",
+        uniqueConstraints = @UniqueConstraint(name = "uk_holding_order", columnNames = "order_id")
+)
+@Getter
+@NoArgsConstructor
+public class Holding extends BaseIdAndTime {
+
+    @Column(nullable = false)
+    private Long orderId;
+
+    @Column(nullable = false)
+    private Long paymentId;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(nullable = false)
+    private Wallet buyerWallet;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(nullable = false)
+    private Wallet sellerWallet;
+
+    @Column(nullable = false)
+    private long amount;
+
+    @Column(nullable = false)
+    private long winningPrice;
+
+    @Column(nullable = false)
+    private long feeAmount;
+
+    @Column(nullable = false)
+    private long deliveryFee;
+
+    // 이 주문 대금(amount)을 무엇으로 냈는지. 세 값의 합 == amount. 환불은 이 구성 그대로 돌려준다
+    @Column(nullable = false)
+    private long pointAmount;
+
+    @Column(nullable = false)
+    private long depositAmount;
+
+    @Column(nullable = false)
+    private long pgAmount;
+
+    // 구매 확정으로 구매자에게 적립된 포인트. 구매 확정 전이거나 적립 대상 금액이 없으면 0
+    @Column(nullable = false)
+    private long earnedPoint;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(nullable = false, length = 20)
+    private HoldingStatus status;
+
+    private LocalDateTime releasedAt;
+
+    private LocalDateTime refundedAt;
+
+    private LocalDateTime confirmedAt;
+
+    private Holding(Long orderId, Long paymentId, Wallet buyerWallet, Wallet sellerWallet, long winningPrice, long deliveryFee, long feeAmount,
+                    PaymentShare share) {
+        if (winningPrice <= 0 || deliveryFee < 0) {
+            throw new BusinessException(INVALID_FEE_AMOUNT);
+        }
+        if (feeAmount < 0 || feeAmount > winningPrice) {
+            throw new BusinessException(INVALID_FEE_AMOUNT);
+        }
+        if (buyerWallet.getId().equals(sellerWallet.getId())) {
+            throw new BusinessException(SAME_BUYER_AND_SELLER);
+        }
+        this.orderId = orderId;
+        this.paymentId = paymentId;
+        this.buyerWallet = buyerWallet;
+        this.sellerWallet = sellerWallet;
+        this.winningPrice = winningPrice;
+        this.deliveryFee = deliveryFee;
+        this.feeAmount = feeAmount;
+        this.amount = winningPrice + deliveryFee;
+        if (share.pointAmount() < 0 || share.depositAmount() < 0 || share.pgAmount() < 0 || share.total() != this.amount) {
+            throw new BusinessException(HOLD_AMOUNT_MISMATCH);
+        }
+        this.pointAmount = share.pointAmount();
+        this.depositAmount = share.depositAmount();
+        this.pgAmount = share.pgAmount();
+        this.status = HoldingStatus.HELD;
+    }
+
+    // 전액 예치금으로 낸 홀딩
+    public static Holding hold(Long orderId, Long paymentId, Wallet buyerWallet, Wallet sellerWallet, long winningPrice, long deliveryFee, long feeAmount) {
+        return hold(orderId, paymentId, buyerWallet, sellerWallet, winningPrice, deliveryFee, feeAmount,
+                PaymentShare.depositOnly(winningPrice + deliveryFee));
+    }
+
+    // share: 이 주문 대금을 포인트 · 예치금 · 직접 결제로 각각 얼마씩 냈는지
+    public static Holding hold(Long orderId, Long paymentId, Wallet buyerWallet, Wallet sellerWallet, long winningPrice, long deliveryFee, long feeAmount,
+                               PaymentShare share) {
+        return new Holding(orderId, paymentId, buyerWallet, sellerWallet, winningPrice, deliveryFee, feeAmount, share);
+    }
+
+    public PaymentShare getShare() {
+        return new PaymentShare(pointAmount, depositAmount, pgAmount);
+    }
+
+    public long getSettlementAmount() {
+        return amount - feeAmount;
+    }
+
+    // 적립 없이 구매 확정
+    public void confirm() {
+        confirm(0L);
+    }
+
+    // 구매 확정. earnedPoint 는 이 확정으로 구매자에게 적립하는 포인트 (계산은 PointEarnCalculator, 지급 기록은 호출하는 쪽)
+    public void confirm(long earnedPoint) {
+        requireHeld();
+        if (earnedPoint < 0) {
+            throw new BusinessException(INVALID_AMOUNT);
+        }
+        this.status = HoldingStatus.CONFIRMED;
+        this.confirmedAt = LocalDateTime.now();
+        this.earnedPoint = earnedPoint;
+    }
+
+    public boolean hasEarnedPoint() {
+        return this.earnedPoint > 0;
+    }
+
+    public void release() {
+        requireConfirmed();
+        this.status = HoldingStatus.RELEASED;
+        this.releasedAt = LocalDateTime.now();
+    }
+
+    public void refund(long requestedAmount) {
+        requireHeld();
+        if (this.amount != requestedAmount) {            // 전액 환불만 허용 — 도메인 규칙
+            throw new BusinessException(REFUND_AMOUNT_MISMATCH);
+        }
+        this.status = HoldingStatus.REFUNDED;
+        this.refundedAt = LocalDateTime.now();
+    }
+
+    private void requireHeld() {
+        switch (this.status) {
+            case HELD -> {}
+            case CONFIRMED -> throw new BusinessException(HOLDING_ALREADY_CONFIRMED);
+            case RELEASED -> throw new BusinessException(HOLDING_ALREADY_RELEASED);
+            case REFUNDED -> throw new BusinessException(HOLDING_ALREADY_REFUNDED);
+        }
+    }
+
+    private void requireConfirmed() {
+        switch (this.status) {
+            case CONFIRMED -> {}
+            case HELD -> throw new BusinessException(HOLDING_NOT_CONFIRMED);
+            case RELEASED -> throw new BusinessException(HOLDING_ALREADY_RELEASED);
+            case REFUNDED -> throw new BusinessException(HOLDING_ALREADY_REFUNDED);
+        }
+    }
+
+    public boolean isRefunded() {
+        return this.status == HoldingStatus.REFUNDED;
+    }
+
+    public boolean isConfirmed() {
+        return this.status == HoldingStatus.CONFIRMED;
+    }
+
+    public boolean isReleased() {
+        return this.status == HoldingStatus.RELEASED;
+    }
+
+    public boolean hasFee() {
+        return this.feeAmount > 0;
+    }
+}
