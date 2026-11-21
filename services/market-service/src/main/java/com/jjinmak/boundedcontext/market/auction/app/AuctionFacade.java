@@ -31,6 +31,12 @@ public class AuctionFacade {
         return auctionCreateUseCase.createAuction(dto);
     }
 
+    // 일괄 열기 (#548): market 경매 시작 흐름의 트랜잭션에 참여한다.
+    @Transactional
+    public List<AuctionCreateResultDto> createAuctions(List<AuctionCreateDto> dtos){
+        return auctionCreateUseCase.createAuctions(dtos);
+    }
+
     // market 재등록 흐름(MarketRelistUseCase)의 트랜잭션에 참여한다.
     @Transactional
     public void validateRelistable(Long auctionId){
@@ -49,11 +55,18 @@ public class AuctionFacade {
     @Transactional(readOnly = true)
     public List<Long> findCloseTargetIds(LocalDateTime now,int batchSize){return auctionCloseUseCase.findCloseTargetIds(now,batchSize);}
 
+    // 종료 타이머 미리 읽기 (#548 4차)
+    @Transactional(readOnly = true)
+    public List<AuctionDeadlineDto> findDeadlinesBefore(LocalDateTime until, int limit){return auctionCloseUseCase.findDeadlinesBefore(until, limit);}
+
     @Transactional
     public AuctionCloseResult closeAuction(Long auctionId,LocalDateTime now){return auctionCloseUseCase.closeAuction(auctionId,now);}
     // 입찰 없는 경매 일괄 유찰 (한 트랜잭션)
     @Transactional
     public int failNoBidAuctions(LocalDateTime now,int batchSize){return auctionCloseUseCase.failNoBidAuctions(now,batchSize);}
+    // 입찰 있는 경매 일괄 낙찰 (한 트랜잭션, #548)
+    @Transactional
+    public int winBidAuctions(LocalDateTime now,int batchSize){return auctionCloseUseCase.winBidAuctions(now,batchSize);}
 
     @Transactional
     public AuctionDetailResponseDto detail(Long auctionId,Long memberId){return auctionDetailUseCase.detail(auctionId,memberId,LocalDateTime.now());}
@@ -88,4 +101,3 @@ public class AuctionFacade {
     @Transactional
     public boolean notifyEndingSoon(Long auctionId, LocalDateTime now) {return auctionEndingSoonUseCase.notifyEndingSoon(auctionId, now);}
 }
-
