@@ -32,11 +32,11 @@
 
 | 구분 | 파일 | 설명 |
 | --- | --- | --- |
-| 시연 영상 | [찐막 시연 영상](시연_영상_링크) | 상품 등록 → 경매 → 낙찰 → 결제 → 거래 채팅 → 배송 → 구매확정 → 정산 흐름 시연 |
+| 시연 영상 | [찐막 시연 영상](https://drive.google.com/file/d/1UckingAqZvoQVW8drG6xKwfAVAMIKHxV/view) | 상품 등록 → 경매 → 낙찰 → 결제 → 거래 채팅 → 배송 → 구매확정 → 정산 흐름 시연 |
 | 포스터 | [찐막 포스터](docs/찐막_포스터.pdf) | 캡스톤 페스티벌 2026 전시 포스터 (90 × 140cm) |
 | 발표 자료 | [찐막 발표 자료](docs/찐막_발표자료.pdf) | 프로젝트 발표용 자료 |
 | 결과 보고서 | [찐막 결과 보고서](docs/찐막_결과보고서.pdf) | 프로젝트 최종 결과 보고서 |
-| 프론트엔드 | [beadv8_8_AHJB_FE](https://github.com/prgrms-be-adv-devcourse/beadv8_8_AHJB_FE) | React · Vite 프론트엔드 저장소 |
+| 프론트엔드 | [찐막 Frontend](https://github.com/Pandarang/jjinmak-frontend) | React · Vite 프론트엔드 저장소 |
 
 ---
 
